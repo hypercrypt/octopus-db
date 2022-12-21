@@ -1,0 +1,15 @@
+<?php
+
+return [
+    'db' => [
+        'dsn' => 'mysql:host=example.com;dbname=octopusdb',
+        'username' => 'user',
+        'password' => 'pass',
+    ],
+    'octopus' => [
+        'pageLimit' => 3,
+        'powerHour' => true,
+        'apiKey' => 'sk_live_jsFOETpI4A8ryvIwsWG1o1Ex',
+        'accountNumber' => 'A-ABC0D123',
+    ],
+];

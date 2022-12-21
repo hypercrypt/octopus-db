@@ -1,0 +1,14 @@
+{
+    "name": "hypercrypt/octopus-db",
+    "type": "project",
+    "require": {
+        "guzzlehttp/guzzle": "^7.5",
+        "psr/log": "^3.0",
+        "ext-pdo": "*"
+    },
+    "config": {
+        "platform": {
+            "php": "8.2"
+        }
+    }
+}
