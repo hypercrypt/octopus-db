@@ -8,7 +8,7 @@ SETUP
 - Setup database. Database file is in `db/schema.sql`
 - Fill in configuration settings
 - Run `composer install`
-- Run php `octopus.php`
+- Run `php octopus.php`
 
 REQUIRES
 --------
