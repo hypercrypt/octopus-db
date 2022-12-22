@@ -1,6 +1,12 @@
 <?php
 
+error_reporting(E_ALL);
+ini_set('display_startup_errors',1);
+ini_set('display_errors', 1);
+
 ini_set(option: 'memory_limit', value: '4G');
+
+require_once __DIR__ . '/db/upgrade_db.php';
 
 require_once __DIR__ . '/classes/OctopusEnergy.php';
 
@@ -38,7 +44,7 @@ foreach ($agreements as $agreement) {
     }
 }
 
-if ($config['octopus']['powerHour'])
+if ($config['octopus']['powerHour'] ?? false)
 {
     $cheap_slots = [];
 
@@ -112,7 +118,8 @@ $price_statement = $database_connection->prepare(
          :value_exc_vat,
          :value_inc_vat,
          NULL,
-         :tariff
+         :tariff,
+         :type
      )'
 );
 foreach ($tariffs as $tariff)
@@ -120,28 +127,31 @@ foreach ($tariffs as $tariff)
     $page = 1;
     $hasNext = true;
 
-
     while ($hasNext && $page <= $page_limit) {
-        $priceData = $octopus->get_prices($tariff, $page++);
-        $hasNext = $priceData?->next != null;
-        $prices = $priceData?->results ?? [];
-        foreach ($prices as $price) {
-            $end   = ($price->valid_to   == null) ? 2147483647 : strtotime($price->valid_to);
-            $start = ($price->valid_from == null) ?          0 : strtotime($price->valid_from);
+        $priceDataArray = $octopus->get_prices($tariff, $page++);
 
-            if ($end < $start)
-            {
-                $hasNext = false;
-                continue;
+        foreach ($priceDataArray as $type => $priceData)
+        {
+            $hasNext = $priceData?->next != null;
+            $prices = $priceData?->results ?? [];
+            foreach ($prices as $price) {
+                $end = ($price->valid_to == null) ? 2147483647 : strtotime($price->valid_to);
+                $start = ($price->valid_from == null) ? 0 : strtotime($price->valid_from);
+
+                if ($end < $start) {
+                    $hasNext = false;
+                    continue;
+                }
+
+                $price_statement->execute([
+                    'start' => $start,
+                    'end' => $end,
+                    'value_exc_vat' => $price->value_exc_vat,
+                    'value_inc_vat' => $price->value_inc_vat,
+                    'tariff' => $tariff,
+                    'type' => $type,
+                ]);
             }
-            $q = "REPLACE INTO `price` VALUES ($start, $end, $price->value_exc_vat, $price->value_inc_vat, NULL, '$tariff');";
-            $price_statement->execute([
-                'start' => $start,
-                'end' => $end,
-                'value_exc_vat' => $price->value_exc_vat,
-                'value_inc_vat' => $price->value_inc_vat,
-                'tariff' => $tariff,
-            ]);
         }
     }
 }
@@ -165,11 +175,12 @@ $usage_statement = $database_connection->prepare('
                           IFNULL(r.value_inc_vat, p.value_inc_vat) * :consumption
                       FROM `price` AS p
                           LEFT JOIN `reduced_rates` AS r
-                              ON  r.valid_from<=:start
-                              AND r.valid_to>=:end
-                      WHERE p.valid_from<=:start
-                        AND p.valid_to>=:end
-                        AND p.tariff=:tariff
+                              ON  r.valid_from <= :start
+                              AND r.valid_to   >= :end
+                      WHERE p.valid_from <= :start
+                        AND p.valid_to   >= :end
+                        AND p.tariff      = :tariff
+                        AND p.rate_type   = :rate_type
                       LIMIT 1');
 $tariff_data_statement = $database_connection->prepare('
                         SELECT `tariff`
@@ -179,6 +190,10 @@ $tariff_data_statement = $database_connection->prepare('
                           AND SUBSTR(`tariff`, 1, 1) = :fuel
                         LIMIT 1'
 );
+
+$e7_start = time_as_decimal($config['octopus']['e7']['start'] ?? '00:30');
+$e7_end = time_as_decimal($config['octopus']['e7']['end'] ?? '07:30') - 0.5; // start time of last 30m slot
+
 foreach ($octopus->meters as $meter => $details)
 {
     $fuel = $details[0];
@@ -208,15 +223,93 @@ foreach ($octopus->meters as $meter => $details)
                     'fuel' => strtoupper(substr($fuel, 0, 1))
                 ]);
 
+                $tariff = $tariff_data_statement->fetchColumn();
+
+                $rate_type = 'standard';
+
+                if (str_starts_with(
+                    haystack: $tariff,
+                    needle: 'E-2R'
+                ))
+                {
+                    try {
+                        $rate_type = is_time_between($e7_start, $e7_end, time_as_decimal($start)) ? 'night' : 'day';
+                    } catch (Exception) {
+                        continue;
+                    }
+                }
+
                 $usage_statement->execute([
                     'start' => $start,
                     'end' => $end,
                     'consumption' => $usage->consumption,
                     'meter' => $meter,
-                    'tariff' => $tariff_data_statement->fetchColumn(),
-                    'fuel' => $fuel
+                    'tariff' => $tariff,
+                    'fuel' => $fuel,
+                    'rate_type' => $rate_type
                 ]);
             }
         }
     } while (isset($usageData->next) && $usageData->next && $page <= $page_limit);
 }
+
+/**
+ * @throws Exception
+ */
+function time_as_decimal(string|int|DateTimeInterface $date_or_string_or_int): float
+{
+    if (is_string($date_or_string_or_int))
+    {
+        $parts = explode(
+            separator: ':',
+            string: $date_or_string_or_int,
+            limit: 2
+        );
+
+        if (count($parts) === 2)
+        {
+            return ((int)$parts[0]) + ((int)$parts[1]) / 60.0;
+        }
+        else
+        {
+            throw new Exception(
+                message: "\$date_or_string_or_int needs to be in the format 00:00[:00], $date_or_string_or_int found."
+            );
+        }
+    }
+    elseif (is_int($date_or_string_or_int))
+    {
+        return ($date_or_string_or_int % 86_400) / 3_600.0;
+    }
+    else
+    {
+        return time_as_decimal($date_or_string_or_int->getTimestamp());
+    }
+}
+
+/**
+ * @throws Exception
+ */
+function is_time_between(float|string $start, float|string $end, float|string $needle): bool
+{
+    if (is_string($start))  $start  = time_as_decimal($start);
+    if (is_string($end))    $end    = time_as_decimal($end);
+    if (is_string($needle)) $needle = time_as_decimal($needle);
+
+    if ($start < $end)
+    {
+        return (
+            ($start <= $needle) &&
+            ($end   >= $needle)
+        );
+    }
+    elseif ($start === $end)
+    {
+        return false;
+    }
+    else // e.g. 22:30 - 04:30
+    {
+        return ($needle >= $start) || ($needle <= $end);
+    }
+}
+

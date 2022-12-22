@@ -32,9 +32,12 @@ class OctopusEnergy {
             $meters[$meter->serial_number] = ['electricity', $property->electricity_meter_points[0]->mpan];
         }
 
-        foreach ($property->gas_meter_points[0]->meters as $meter)
+        if (count($property->gas_meter_points) > 0)
         {
-            $meters[$meter->serial_number] = ['gas', $property->gas_meter_points[0]->mprn];
+            foreach ($property->gas_meter_points[0]->meters as $meter)
+            {
+                $meters[$meter->serial_number] = ['gas', $property->gas_meter_points[0]->mprn];
+            }
         }
 
         $this->meters = $meters;
@@ -64,18 +67,39 @@ class OctopusEnergy {
         };
     }
 
-    public function get_prices($code, $page=1): ?stdClass
+    public function get_prices($code, $page=1): array
     {
         $id = $this->product_id_from_product_code($code);
         $fuel = $this->fuel_from_tariff_code($code);
 
-        return $this->fetch_json("products/$id/$fuel-tariffs/$code/standard-unit-rates/?page=$page&page_size=100");
+        if (str_starts_with(
+            haystack: $code,
+            needle: 'E-2R'
+        ))
+        {
+            return [
+                'day'   => $this->fetch_json("products/$id/$fuel-tariffs/$code/day-unit-rates/?page=$page&page_size=100"),
+                'night' => $this->fetch_json("products/$id/$fuel-tariffs/$code/night-unit-rates/?page=$page&page_size=100")
+            ];
+        }
+        else
+        {
+            return [
+                'standard' => $this->fetch_json("products/$id/$fuel-tariffs/$code/standard-unit-rates/?page=$page&page_size=100")
+            ];
+        }
     }
+
 
     public function get_usage($meter, $page, $fuel, $mpoint): ?stdClass
     {
         return $this->fetch_json("$fuel-meter-points/$mpoint/meters/$meter/consumption/?page=$page&page_size=200");
     }
-
-
 }
+
+$config = require  __DIR__ . '/../config.php';
+
+$oe = new OctopusEnergy(
+    api_key: $config['octopus']['apiKey'],
+    account_number: $config['octopus']['accountNumber'],
+);
