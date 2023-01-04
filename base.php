@@ -56,6 +56,8 @@ if (!function_exists('config_get')) {
         $key = $key_path[0];
         unset($key_path[0]);
 
+        if (!isset($data[$key])) return $default;
+
         return config_get(
             key_path: array_values($key_path),
             default: $default,
