@@ -100,8 +100,7 @@ readonly class Bright {
             $this->client->get(
                 uri: $path,
                 options: [
-                    'query' => $query,
-                    'version' => 2,
+                    'query' => $query
                 ]
             )->getBody()
         );
