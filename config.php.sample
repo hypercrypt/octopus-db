@@ -11,6 +11,10 @@ return [
         'powerHour' => false,
         'apiKey' => 'sk_live_jsFOETpI4A8ryvIwsWG1o1Ex',
         'accountNumber' => 'A-ABC0D123',
+        'e7' => [
+            'start' => '00:30',
+            'end' => '11:30',
+        ],
     ],
     'bright' => [
         'resourceIds' => [
