@@ -82,8 +82,7 @@ class OctopusEnergy {
                     'json' => [
                         'query' => $query,
                         'variables' => $variables,
-                    ],
-                    'version' => 2,
+                    ]
                 ]
             )->getBody()
         );
@@ -97,7 +96,6 @@ class OctopusEnergy {
                     uri: $uri,
                     options: [
                         'query' => $query,
-                        'version' => 2,
                     ],
                 )
                 ->getBody()
