@@ -98,115 +98,99 @@ FROM `usage`;
 
 
 
-# Dump of view billing_e_day
-# ------------------------------------------------------------
-
-DROP TABLE IF EXISTS `billing_e_day`; DROP VIEW IF EXISTS `billing_e_day`;
-
-CREATE VIEW `billing_e_day`
-AS SELECT
-   cast(from_unixtime(`u`.`interval_start`) as date) AS `date`,
-   round(sum(if((`u`.`reduced_rate_inc_vat` <= 10),`u`.`consumption`,0)),3) AS `off-peak kWh`,
-   round(sum(if((`u`.`reduced_rate_inc_vat` > 10),`u`.`consumption`,0)),3) AS `peak kWh`,
-   round(sum(`u`.`consumption`),3) AS `total kWh`,
-   round((sum(`u`.`reduced_price_inc_vat`) / 100),2) AS `cost`,
-   round((sum(`u`.`reduced_price_inc_vat`) / sum(`u`.`consumption`)),2) AS `p/kWh`,
-   group_concat(distinct `u`.`tariff` separator ',') AS `tariffs`
+DROP VIEW IF EXISTS `billing_e_hh`;
+CREATE VIEW `billing_e_hh` AS
+SELECT
+    FROM_UNIXTIME(`u`.`interval_start`)                                                      AS `period`,
+    ROUND(`u`.`consumption`, 3)                                                              AS `kwh_total`,
+    ROUND(IF((`u`.`reduced_rate_inc_vat` >  `t`.`offpeakThreshold`), `u`.`consumption`,0),3) AS `kwh_peak`,
+    ROUND(IF((`u`.`reduced_rate_inc_vat` <= `t`.`offpeakThreshold`), `u`.`consumption`,0),3) AS `kWh_offpeak`,
+    ROUND((`u`.`reduced_price_inc_vat` / 100),6)                                             AS `cost`,
+    ROUND(`u`.`reduced_rate_inc_vat`,4)                                                      AS `ppkwh`,
+    `u`.`tariff`                                                                             AS `tariffs`
 FROM `usage` `u`
-where (`u`.`fuel` = 'electricity')
-group by `date`
-order by `date` desc;
+         LEFT JOIN `tariff` `t`
+                   ON `u`.`tariff` = `t`.`tariff`
+                       AND `u`.`interval_start` >= `t`.`valid_from`
+                       AND `u`.`interval_end`   <= `t`.`valid_to`
+WHERE (`u`.`fuel` = 'electricity')
+ORDER BY `u`.`interval_start` DESC;
 
-# Dump of view billing_e_year
-# ------------------------------------------------------------
+DROP VIEW IF EXISTS `billing_e_h`;
+CREATE VIEW `billing_e_h` AS
+SELECT
+    CONCAT(SUBSTR(`period`, 1, 14), '00:00')                                         AS `period`,
+    SUM(`kwh_total`)                                                                 AS `kwh_total`,
+    SUM(`kwh_peak`)                                                                  AS `kwh_peak`,
+    SUM(`kWh_offpeak`)                                                               AS `kWh_offpeak`,
+    IF(SUM(`kwh_total`)=0, 0, ROUND(SUM(`kWh_offpeak`) / SUM(`kwh_total`) * 100, 1)) AS `percent_offpeak`,
+    SUM(`cost`)                                                                      AS `cost`,
+    IF(SUM(`kwh_total`)=0, 0, ROUND(SUM(`cost`) / SUM(`kwh_total`) * 100, 2))        AS `pperkwh`,
+    GROUP_CONCAT(DISTINCT `tariffs`)                                                 AS `tariffs`
+FROM billing_e_hh
+GROUP BY CONCAT(SUBSTR(`period`, 1, 14), '00:00')
+ORDER BY `period` DESC; SHOW WARNINGS;
 
-DROP TABLE IF EXISTS `billing_e_year`; DROP VIEW IF EXISTS `billing_e_year`;
+DROP VIEW IF EXISTS `billing_e_day`;
+CREATE VIEW `billing_e_day` AS
+SELECT
+    SUBSTR(`period`, 1, 10)                                                          AS `period`,
+    SUM(`kwh_total`)                                                                 AS `kwh_total`,
+    SUM(`kwh_peak`)                                                                  AS `kwh_peak`,
+    SUM(`kWh_offpeak`)                                                               AS `kWh_offpeak`,
+    IF(SUM(`kwh_total`)=0, 0, ROUND(SUM(`kWh_offpeak`) / SUM(`kwh_total`) * 100, 1)) AS `percent_offpeak`,
+    SUM(`cost`)                                                                      AS `cost`,
+    IF(SUM(`kwh_total`)=0, 0, ROUND(SUM(`cost`) / SUM(`kwh_total`) * 100, 2))        AS `pperkwh`,
+    GROUP_CONCAT(DISTINCT `tariffs`)                                                 AS `tariffs`
+FROM billing_e_hh
+GROUP BY SUBSTR(`period`, 1, 10)
+ORDER BY `period` DESC;
 
-CREATE VIEW `billing_e_year`
-AS SELECT
-   date_format(`billing_e_day`.`date`,'%Y') AS `year`,
-   round(sum(`billing_e_day`.`off-peak kWh`),3) AS `off-peak kWh`,
-   round(sum(`billing_e_day`.`peak kWh`),3) AS `peak kWh`,
-   round(sum(`billing_e_day`.`total kWh`),3) AS `total kWh`,
-   round(sum(`billing_e_day`.`cost`),2) AS `cost`,
-   round(((sum(`billing_e_day`.`cost`) / sum(`billing_e_day`.`total kWh`)) * 100),2) AS `p/kWh`,
-   group_concat(distinct `billing_e_day`.`tariffs` separator ',') AS `tariffs`
-FROM `billing_e_day`
-group by `year`
-order by `year` desc;
+DROP VIEW IF EXISTS `billing_e_week`;
+CREATE VIEW `billing_e_week` AS
+SELECT
+    DATE_FORMAT(SUBSTR(`period`, 1, 10), '%xwk%v')                                   AS `period`,
+    SUM(`kwh_total`)                                                                 AS `kwh_total`,
+    SUM(`kwh_peak`)                                                                  AS `kwh_peak`,
+    SUM(`kWh_offpeak`)                                                               AS `kWh_offpeak`,
+    IF(SUM(`kwh_total`)=0, 0, ROUND(SUM(`kWh_offpeak`) / SUM(`kwh_total`) * 100, 1)) AS `percent_offpeak`,
+    SUM(`cost`)                                                                      AS `cost`,
+    IF(SUM(`kwh_total`)=0, 0, ROUND(SUM(`cost`) / SUM(`kwh_total`) * 100, 2))        AS `pperkwh`,
+    GROUP_CONCAT(DISTINCT `tariffs`)                                                 AS `tariffs`,
+    CONCAT(MIN(SUBSTR(`period`, 1, 10)), ' ~> ', MAX(SUBSTR(`period`, 1, 10)))       AS `dates`
+FROM billing_e_hh
+GROUP BY DATE_FORMAT(SUBSTR(`period`, 1, 10), '%xwk%v')
+ORDER BY `period` DESC;
 
-# Dump of view billing_e_hh
-# ------------------------------------------------------------
+DROP VIEW IF EXISTS `billing_e_month`;
+CREATE VIEW `billing_e_month` AS
+SELECT
+    SUBSTR(`period`, 1, 7)                                                           AS `period`,
+    SUM(`kwh_total`)                                                                 AS `kwh_total`,
+    SUM(`kwh_peak`)                                                                  AS `kwh_peak`,
+    SUM(`kWh_offpeak`)                                                               AS `kWh_offpeak`,
+    IF(SUM(`kwh_total`)=0, 0, ROUND(SUM(`kWh_offpeak`) / SUM(`kwh_total`) * 100, 1)) AS `percent_offpeak`,
+    SUM(`cost`)                                                                      AS `cost`,
+    IF(SUM(`kwh_total`)=0, 0, ROUND(SUM(`cost`) / SUM(`kwh_total`) * 100, 2))        AS `pperkwh`,
+    GROUP_CONCAT(DISTINCT `tariffs`)                                                 AS `tariffs`
+FROM billing_e_hh
+GROUP BY SUBSTR(`period`, 1, 7)
+ORDER BY `period` DESC;
 
-DROP TABLE IF EXISTS `billing_e_hh`; DROP VIEW IF EXISTS `billing_e_hh`;
-
-CREATE VIEW `billing_e_hh`
-AS SELECT
-   from_unixtime(`u`.`interval_start`) AS `time`,
-   round(if((`u`.`reduced_rate_inc_vat` <= 10),`u`.`consumption`,0),4) AS `off-peak kWh`,
-   round(if((`u`.`reduced_rate_inc_vat` > 10),`u`.`consumption`,0),4) AS `peak kWh`,
-   round(`u`.`consumption`,3) AS `total kWh`,
-   round((`u`.`reduced_price_inc_vat` / 100),6) AS `cost`,
-   round(`u`.`reduced_rate_inc_vat`,4) AS `p/kWh`,
-   `u`.`tariff` AS `tariffs`
-FROM `usage` `u`
-where (`u`.`fuel` = 'electricity')
-order by `u`.`interval_start` desc;
-
-# Dump of view billing_e_month
-# ------------------------------------------------------------
-
-DROP TABLE IF EXISTS `billing_e_month`; DROP VIEW IF EXISTS `billing_e_month`;
-
-CREATE VIEW `billing_e_month`
-AS SELECT
-   date_format(`billing_e_day`.`date`,'%Y-%m') AS `month`,
-   round(sum(`billing_e_day`.`off-peak kWh`),3) AS `off-peak kWh`,
-   round(sum(`billing_e_day`.`peak kWh`),3) AS `peak kWh`,
-   round(sum(`billing_e_day`.`total kWh`),3) AS `total kWh`,
-   round(((100 * sum(`billing_e_day`.`off-peak kWh`)) / sum(`billing_e_day`.`total kWh`)),1) AS `percent off-peak`,
-   round(sum(`billing_e_day`.`cost`),2) AS `cost`,
-   round(((sum(`billing_e_day`.`cost`) / sum(`billing_e_day`.`total kWh`)) * 100),2) AS `p/kWh`,
-   group_concat(distinct `billing_e_day`.`tariffs` separator ',') AS `tariffs`
-FROM `billing_e_day`
-group by `month`
-order by `month` desc;
-
-# Dump of view billing_e_h
-# ------------------------------------------------------------
-
-DROP TABLE IF EXISTS `billing_e_h`; DROP VIEW IF EXISTS `billing_e_h`;
-
-CREATE VIEW `billing_e_h`
-AS SELECT
-   concat(substr(from_unixtime(`u`.`interval_start`),1,14),'00') AS `hour`,
-   round(sum(if((`u`.`reduced_rate_inc_vat` <= 7.5),`u`.`consumption`,0)),3) AS `off-peak kWh`,
-   round(sum(if((`u`.`reduced_rate_inc_vat` > 7.5),`u`.`consumption`,0)),3) AS `peak kWh`,
-   round(sum(`u`.`consumption`),3) AS `total kWh`,
-   round((sum(`u`.`reduced_price_inc_vat`) / 100),2) AS `cost`,
-   round((sum(`u`.`reduced_price_inc_vat`) / sum(`u`.`consumption`)),2) AS `p/kWh`,
-   group_concat(distinct `u`.`tariff` separator ',') AS `tariffs`
-FROM `usage` `u`
-where (`u`.`fuel` = 'electricity')
-group by `hour`
-order by `hour` desc;
-
-# Dump of view billing_e_week
-# ------------------------------------------------------------
-
-DROP TABLE IF EXISTS `billing_e_week`; DROP VIEW IF EXISTS `billing_e_week`;
-
-CREATE VIEW `billing_e_week`
-AS SELECT
-   date_format(`billing_e_day`.`date`,'%xwk%v') AS `week`,
-   round(sum(`billing_e_day`.`off-peak kWh`),3) AS `off-peak kWh`,
-   round(sum(`billing_e_day`.`peak kWh`),3) AS `peak kWh`,
-   round(sum(`billing_e_day`.`total kWh`),3) AS `total kWh`,
-   round(sum(`billing_e_day`.`cost`),2) AS `cost`,
-   round(((sum(`billing_e_day`.`cost`) / sum(`billing_e_day`.`total kWh`)) * 100),2) AS `p/kWh`,
-   group_concat(distinct `billing_e_day`.`tariffs` separator ',') AS `tariffs`,
-   concat(min(`billing_e_day`.`date`),' ~> ',max(`billing_e_day`.`date`)) AS `dates`
-FROM `billing_e_day` group by `week` order by `week` desc;
+DROP VIEW IF EXISTS `billing_e_year`;
+CREATE VIEW `billing_e_year` AS
+SELECT
+    SUBSTR(`period`, 1, 4)                                                           AS `period`,
+    SUM(`kwh_total`)                                                                 AS `kwh_total`,
+    SUM(`kwh_peak`)                                                                  AS `kwh_peak`,
+    SUM(`kWh_offpeak`)                                                               AS `kWh_offpeak`,
+    IF(SUM(`kwh_total`)=0, 0, ROUND(SUM(`kWh_offpeak`) / SUM(`kwh_total`) * 100, 1)) AS `percent_offpeak`,
+    SUM(`cost`)                                                                      AS `cost`,
+    IF(SUM(`kwh_total`)=0, 0, ROUND(SUM(`cost`) / SUM(`kwh_total`) * 100, 2))        AS `pperkwh`,
+    GROUP_CONCAT(DISTINCT `tariffs`)                                                 AS `tariffs`
+FROM billing_e_hh
+GROUP BY SUBSTR(`period`, 1, 4)
+ORDER BY `period` DESC;
 
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

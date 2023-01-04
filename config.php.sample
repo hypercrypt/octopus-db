@@ -8,8 +8,16 @@ return [
     ],
     'octopus' => [
         'pageLimit' => 3,
-        'powerHour' => true,
+        'powerHour' => false,
         'apiKey' => 'sk_live_jsFOETpI4A8ryvIwsWG1o1Ex',
         'accountNumber' => 'A-ABC0D123',
+    ],
+    'bright' => [
+        'resourceIds' => [
+            'electricity' => '8746960a-e083-43e0-b644-09f1091a1143',
+            'gas' => 'b2500fc9-540c-4305-87f7-359b2968a8a6',
+        ],
+        'username' => 'klaus@example.com',
+        'password' => 'password',
     ],
 ];

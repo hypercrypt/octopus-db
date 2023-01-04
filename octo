@@ -1,0 +1,34 @@
+#!/usr/bin/env php
+<?php
+
+
+$command = $argv[1] ?? 'help';
+
+foreach ($argv as $index => $option)
+{
+    if ($index < 2 || !str_contains(haystack: $option, needle: '=')) continue;
+
+    [$argument, $value] = explode(
+        separator: '=',
+        string: $option,
+        limit: 2
+    );
+
+    $$argument = $value;
+}
+
+require_once __DIR__ . '/base.php';
+
+if (!str_starts_with(haystack: $command, needle: 'db/'))
+{
+    require_once __DIR__ . '/scripts/db/upgrade.php';
+}
+
+if (str_contains(haystack: $command, needle: '.')) die('. is not allowed in commands');
+
+if (file_exists(__DIR__ . '/scripts/' . $command . '.php'))
+{
+    return require_once __DIR__ . '/scripts/' . $command . '.php';
+}
+
+echo $command, ' not found', PHP_EOL;

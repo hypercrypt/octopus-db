@@ -24,7 +24,8 @@ CREATE TABLE `price` (
   `value_inc_vat` decimal(8,4) NOT NULL,
   `comment` char(128) DEFAULT NULL,
   `tariff` char(128) NOT NULL,
-  PRIMARY KEY (`valid_from`,`valid_to`,`tariff`),
+  `rate_type` enum('day','night','standard') NOT NULL DEFAULT 'standard',
+  PRIMARY KEY (`valid_from`,`valid_to`,`tariff`,`rate_type`),
   KEY `valid_from` (`valid_from`),
   KEY `valid_to` (`valid_to`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
@@ -102,6 +103,21 @@ CREATE TABLE `usage` (
   KEY `tariff` (`tariff`),
   KEY `fuel` (`fuel`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+
+# Dump of table __tokens__
+# ------------------------------------------------------------
+
+DROP TABLE IF EXISTS `__tokens__`;
+
+CREATE TABLE `__tokens__` (
+  `service` char(10) NOT NULL,
+  `username` varchar(128) NOT NULL,
+  `token` varchar(10000) DEFAULT NULL,
+  `refresh_token` varchar(5000) DEFAULT NULL,
+  `other_info` varchar(5000) DEFAULT NULL,
+  PRIMARY KEY (`service`,`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+
 
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
