@@ -199,12 +199,12 @@ class OctopusEnergy {
                     `r`.comment
                 FROM `price` AS `p`
                     LEFT JOIN `reduced_rates` AS `r` 
-                        ON r.valid_from <= $timestamp AND r.valid_to >=$timestamp
-                WHERE p.valid_from <= $timestamp AND p.valid_to >=$timestamp
+                        ON r.valid_from <= $timestamp AND r.valid_to > $timestamp
+                WHERE p.valid_from <= $timestamp AND p.valid_to > $timestamp
                   AND p.`tariff`=(
                       SELECT `tariff`
                       FROM `tariff`
-                      WHERE `valid_to`   >= $timestamp 
+                      WHERE `valid_to`   >  $timestamp 
                         AND `valid_from` <= $timestamp
                         AND `tariff` LIKE 'E-%'
                       LIMIT 1
@@ -218,12 +218,12 @@ class OctopusEnergy {
                     `p`.`value_inc_vat`                              AS `rate_inc_vat`,
                      ''                                              AS `comment`
                 FROM `price` AS `p`
-                WHERE p.valid_from <= 1672012800 AND p.valid_to >=1672012800
+                WHERE p.valid_from <= $timestamp AND p.valid_to > $timestamp
                   AND p.`tariff`=(
                       SELECT `tariff`
                       FROM `tariff`
-                      WHERE `valid_to`   >= 1672012800
-                        AND `valid_from` <= 1672012800
+                      WHERE `valid_to`   >  $timestamp
+                        AND `valid_from` <= $timestamp
                         AND `tariff` LIKE 'G-%'
                       LIMIT 1
                   )

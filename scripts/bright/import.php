@@ -38,11 +38,12 @@ foreach (config_get('bright.resourceIds') as $fuel => $resourceId)
         ")
         ->fetchColumn();
 
-    $end_time = (new DateTime())->format('Y-m-d\TH:i:00');
+    $now = new DateTimeImmutable();
+    $end_time = $now->format('Y-m-d\TH:i:00');
 
     $usage_data = $bright->past_usage(
         resourceId: $resourceId,
-        from: $start_time,
+        from: $start_time ?? $now->sub(new DateInterval('P9D'))->format('Y-m-d\TH:i:00'),
         to: $end_time
     );
 
@@ -50,9 +51,7 @@ foreach (config_get('bright.resourceIds') as $fuel => $resourceId)
 
     foreach ($usage_data as [$from, $consumption])
     {
-//        $from = (int)$usage[0];
         $to = $from + 30 * 60;
-//        $consumption = (double)$usage[1];
 
         $price = OctopusEnergy::select_price($from, $fuel);
 
